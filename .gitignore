@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Environment variables
+.env
+
+# Temporary files
+jobs_raw_*.json
+jobs_analyzed_*.json
+
+# IDE
+.vscode/
+.idea/ 
