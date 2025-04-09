@@ -1,8 +1,8 @@
-name: Mojedelo daily scraper
+name: Zavod daily scraper
 
 on:
   schedule:
-    - cron: '0 18 * * *'  # Runs at 18:00 UTC every day
+    - cron: '0 21 * * *'  # Runs at 21:00 UTC every day
   workflow_dispatch:  # Allows manual trigger
 
 jobs:

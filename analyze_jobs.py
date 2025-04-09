@@ -10,6 +10,8 @@ def analyze_with_gemini(batch_file: str, api_key: str) -> list:
         with open(batch_file, 'r', encoding='utf-8') as f:
             jobs = json.load(f)
         
+        print(f"Loaded {len(jobs)} jobs from {batch_file}")
+        
         # Clean the job data while preserving special characters
         cleaned_jobs = []
         for job in jobs:
@@ -37,18 +39,19 @@ def analyze_with_gemini(batch_file: str, api_key: str) -> list:
             "job_id": "unique identifier or empty string",
             "title": "job title",
             "company": "company name",
-            "location": "city/location",
+            "location": "standardized region name (see rules below)",
+            "town_location": "actual town/city name",
             "posted_date": "2025-04-04", 
             "application_deadline": "YYYY-MM-DD or null",
             "job_url": "full URL",
             "work_mode": "On-site/Remote/Hybrid",
+            "industry": "standardized industry category (see rules below)",
             "compensation": {
               "salary_range": "",
               "benefits_package": ""
             },
             "company_info": {
               "size": "",
-              "industry": "",
               "years_active": "",
               "business_scale": ""
             },
@@ -70,7 +73,11 @@ def analyze_with_gemini(batch_file: str, api_key: str) -> list:
         Gorenjska, Goriška, Jugovzhodna Slovenija, Koroška, Notranjsko-kraška, Obalno-kraška, Osrednjeslovenska, 
         Podravska, Pomurska, Savinjska, Spodnjeposavska, Zasavska, Tujina, Remote
         
-        2. For "company_info.industry", only use ONE of these standardized industry categories:
+        2. For "town_location", use the actual town or city name from the job listing.
+        
+        3. For "work_mode", use only one of these three values: "On-site", "Remote", or "Hybrid"
+        
+        4. For "industry", only use ONE of these standardized industry categories:
         Administracija
         Arhitektura, Gradbeništvo, Geodezija
         Bančništvo, Finance
@@ -105,12 +112,13 @@ def analyze_with_gemini(batch_file: str, api_key: str) -> list:
         RETURN ONLY THE JSON ARRAY. No markdown formatting.
         """
         
-        # Break into smaller chunks if needed - process 5 jobs at a time to avoid context issues
-        max_jobs_per_request = 5
+        # Set chunk size to 10 jobs per API call (changed from 50)
+        max_jobs_per_request = 10
         all_analyzed_jobs = []
         
         for i in range(0, len(cleaned_jobs), max_jobs_per_request):
             chunk = cleaned_jobs[i:i+max_jobs_per_request]
+            print(f"Processing chunk of {len(chunk)} jobs (jobs {i+1} to {i+len(chunk)})")
             # Convert chunk to plain text to avoid JSON complexity
             jobs_text = "\n\nJOB LISTINGS TO PROCESS:\n\n"
             
@@ -139,7 +147,7 @@ def analyze_with_gemini(batch_file: str, api_key: str) -> list:
             try:
                 chunk_jobs = json.loads(response_text)
                 all_analyzed_jobs.extend(chunk_jobs)
-                print(f"Successfully processed {len(chunk_jobs)} jobs from {batch_file}")
+                print(f"Successfully processed {len(chunk_jobs)} jobs from chunk {i//max_jobs_per_request + 1}")
             except json.JSONDecodeError as e:
                 print(f"Error with chunk, trying one-by-one processing for jobs {i} to {i+len(chunk)-1}")
                 
@@ -178,23 +186,102 @@ def main():
     
     today = datetime.now().strftime('%Y%m%d')
     all_analyzed_jobs = []
-    batch_number = 1
     
-    # Process each batch file
-    while True:
-        batch_file = f"jobs_raw_{today}_batch{batch_number}.json"
-        if not os.path.exists(batch_file):
-            break
+    # Process command line arguments if any
+    import sys
+    specific_file = None
+    if len(sys.argv) > 1:
+        specific_file = sys.argv[1]
+        print(f"Processing specific file: {specific_file}")
+    
+    # Set chunking parameters
+    split_into_smaller_files = True
+    max_jobs_per_file = 10  # Changed from 15 to 10
+    
+    # Process specific file if provided
+    if specific_file and os.path.exists(specific_file):
+        if split_into_smaller_files:
+            with open(specific_file, 'r', encoding='utf-8') as f:
+                all_jobs = json.load(f)
             
-        print(f"\nProcessing batch {batch_number}")
-        analyzed_jobs = analyze_with_gemini(batch_file, api_key)
-        if analyzed_jobs:
-            all_analyzed_jobs.extend(analyzed_jobs)
-        batch_number += 1
+            print(f"Found {len(all_jobs)} jobs in {specific_file}")
+            
+            # Create smaller files with max_jobs_per_file jobs each
+            for i in range(0, len(all_jobs), max_jobs_per_file):
+                chunk = all_jobs[i:i+max_jobs_per_file]
+                chunk_file = f"{specific_file.split('.')[0]}_chunk{i//max_jobs_per_file + 1}.json"
+                
+                with open(chunk_file, 'w', encoding='utf-8') as f:
+                    json.dump(chunk, f, ensure_ascii=False, indent=2)
+                
+                print(f"Created chunk file {chunk_file} with {len(chunk)} jobs")
+                
+                # Process this chunk file
+                analyzed_jobs = analyze_with_gemini(chunk_file, api_key)
+                if analyzed_jobs:
+                    all_analyzed_jobs.extend(analyzed_jobs)
+        else:
+            # Process the whole file as before
+            analyzed_jobs = analyze_with_gemini(specific_file, api_key)
+            if analyzed_jobs:
+                all_analyzed_jobs.extend(analyzed_jobs)
+    else:
+        batch_number = 1
+        
+        # Process each batch file
+        while True:
+            batch_file = f"jobs_raw_{today}_batch{batch_number}.json"
+            if not os.path.exists(batch_file):
+                detailed_file = f"detailed_jobs_{today}.json"
+                if os.path.exists(detailed_file):
+                    print(f"\nProcessing detailed jobs file: {detailed_file}")
+                    
+                    # Split the detailed file into smaller chunks if needed
+                    if split_into_smaller_files:
+                        with open(detailed_file, 'r', encoding='utf-8') as f:
+                            all_jobs = json.load(f)
+                        
+                        print(f"Found {len(all_jobs)} jobs in {detailed_file}")
+                        
+                        # Create smaller files with max_jobs_per_file jobs each
+                        for i in range(0, len(all_jobs), max_jobs_per_file):
+                            chunk = all_jobs[i:i+max_jobs_per_file]
+                            chunk_file = f"detailed_jobs_{today}_chunk{i//max_jobs_per_file + 1}.json"
+                            
+                            with open(chunk_file, 'w', encoding='utf-8') as f:
+                                json.dump(chunk, f, ensure_ascii=False, indent=2)
+                            
+                            print(f"Created chunk file {chunk_file} with {len(chunk)} jobs")
+                            
+                            # Process this chunk file
+                            analyzed_jobs = analyze_with_gemini(chunk_file, api_key)
+                            if analyzed_jobs:
+                                all_analyzed_jobs.extend(analyzed_jobs)
+                    else:
+                        # Process the whole file as before
+                        analyzed_jobs = analyze_with_gemini(detailed_file, api_key)
+                        if analyzed_jobs:
+                            all_analyzed_jobs.extend(analyzed_jobs)
+                    break
+                else:
+                    break
+            else:
+                print(f"\nProcessing batch {batch_number}")
+                analyzed_jobs = analyze_with_gemini(batch_file, api_key)
+                if analyzed_jobs:
+                    all_analyzed_jobs.extend(analyzed_jobs)
+                batch_number += 1
     
     # Save all analyzed jobs to a single file
     if all_analyzed_jobs:
-        output_file = f"jobs_analyzed_{today}.json"
+        # If processing a specific file, use its name in the output
+        if specific_file:
+            base_name = os.path.basename(specific_file)
+            name_part = base_name.split('.')[0]
+            output_file = f"{name_part}_analyzed.json"
+        else:
+            output_file = f"jobs_analyzed_{today}.json"
+            
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(all_analyzed_jobs, f, ensure_ascii=False, indent=2)
         print(f"\nAll analyzed jobs saved to: {output_file}")

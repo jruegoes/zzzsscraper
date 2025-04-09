@@ -80,7 +80,7 @@ def format_job_for_upload(job: Dict[str, Any], index: int) -> Dict[str, Any]:
     
     # Create a unique ID based on date and sequence number
     today = datetime.now().strftime('%Y%m%d')
-    unique_id = f"mojedelo_{today}_{index + 1}"  # e.g., mojedelo_20240404_1
+    unique_id = f"zavod_{today}_{index + 1}"  # e.g., zavod_20240404_1
     
     try:
         # Handle dates
@@ -98,10 +98,12 @@ def format_job_for_upload(job: Dict[str, Any], index: int) -> Dict[str, Any]:
             'title': safe_strip(job.get('title')) or 'Untitled Position',
             'company': safe_strip(job.get('company')) or 'Unknown Company',
             'location': safe_strip(job.get('location')) or 'Slovenia',
+            'town_location': safe_strip(job.get('town_location')) or '',
             'posted_date': posted_date,
             'application_deadline': application_deadline,
             'job_url': safe_strip(job.get('job_url')) or '',
             'work_mode': safe_strip(job.get('work_mode')) or 'Not specified',
+            'industry': safe_strip(job.get('industry')) or '',
             
             # JSONB fields with guaranteed structure
             'compensation': safe_dict(job.get('compensation')),
@@ -131,10 +133,12 @@ def format_job_for_upload(job: Dict[str, Any], index: int) -> Dict[str, Any]:
             'title': 'Error Processing Job',
             'company': 'Unknown Company',
             'location': 'Slovenia',
+            'town_location': '',
             'posted_date': today,
             'application_deadline': None,
             'job_url': '',
             'work_mode': 'Not specified',
+            'industry': '',
             'compensation': {},
             'company_info': {},
             'employment_type': '',
