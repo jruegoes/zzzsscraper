@@ -80,31 +80,76 @@ class ESSJobScraper:
         Use Selenium to scrape jobs from the ESS website.
         If limit is None, all available jobs will be scraped.
         """
-        # Configure Chrome options
+        # Configure Chrome options with extended timeouts
         chrome_options = Options()
         chrome_options.add_argument("--headless")  # Run in headless mode
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--window-size=1920,1080")  # Set larger window size
+        chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+        chrome_options.add_argument("--disable-extensions")  # Disable extensions for better stability
+        chrome_options.add_argument("--proxy-server='direct://'")  # Bypass proxy for localhost
+        chrome_options.add_argument("--proxy-bypass-list=*")  # Bypass proxy for all connections
+        chrome_options.add_argument("--start-maximized")  # Start maximized
+        chrome_options.add_argument("--disable-features=NetworkService")  # Disable network service
+        chrome_options.add_argument("--disable-features=VizDisplayCompositor")  # Disable compositor
         
-        # Initialize the driver
+        # Initialize the driver with expanded timeout settings
         driver = webdriver.Chrome(options=chrome_options)
+        driver.set_page_load_timeout(300)  # Increase page load timeout to 5 minutes
+        
+        # Set up URLs we can try
+        urls_to_try = [
+            self.base_url,
+            "https://www.ess.gov.si/iskalci-zaposlitve/iskanje-zaposlitve/iskanje-dela/",
+            "https://www.ess.gov.si/"
+        ]
         
         try:
-            # Navigate to the URL
-            driver.get(self.base_url)
+            connected = False
             
-            # Wait for job listings to load (max 10 seconds)
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
-            )
+            # Try each URL until one works
+            for url in urls_to_try:
+                try:
+                    print(f"Attempting to load URL: {url}")
+                    driver.get(url)
+                    # If we get here, we connected successfully
+                    connected = True
+                    print(f"Successfully connected to {url}")
+                    break
+                except Exception as e:
+                    print(f"Failed to connect to {url}: {e}")
+                    continue
             
-            # Get the total number of jobs
-            total_jobs_element = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".card-header-title.number-text strong"))
-            )
-            total_jobs = int(total_jobs_element.text.strip())
-            print(f"Total jobs available: {total_jobs}")
+            if not connected:
+                print("Failed to connect to any URLs. Check network connectivity.")
+                return []
+            
+            # Wait for job listings to load (max 30 seconds instead of 10)
+            try:
+                WebDriverWait(driver, 30).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
+                )
+            except Exception as e:
+                print(f"Warning: Timed out waiting for job listings: {e}")
+                # Try refreshing the page
+                driver.refresh()
+                time.sleep(5)
+                WebDriverWait(driver, 30).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
+                )
+            
+            # Get the total number of jobs - with additional error handling
+            try:
+                total_jobs_element = WebDriverWait(driver, 30).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".card-header-title.number-text strong"))
+                )
+                total_jobs = int(total_jobs_element.text.strip())
+                print(f"Total jobs available: {total_jobs}")
+            except Exception as e:
+                print(f"Warning: Could not determine total jobs: {e}")
+                total_jobs = 100  # Default to a reasonable number
+                print(f"Using default value of {total_jobs} jobs")
             
             # Adjust max jobs to scrape based on limit
             max_jobs_to_scrape = total_jobs if limit is None else min(limit, total_jobs)
