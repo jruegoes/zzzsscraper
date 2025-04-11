@@ -89,64 +89,36 @@ class ESSJobScraper:
         Use Selenium to scrape jobs from the ESS website.
         If limit is None, all available jobs will be scraped.
         """
+        # Basic Chrome options
         chrome_options = Options()
         chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--window-size=1920,1080")
         
-        # Add these network-specific options
-        chrome_options.add_argument("--disable-web-security")
-        chrome_options.add_argument("--ignore-certificate-errors")
-        chrome_options.add_argument("--allow-running-insecure-content")
-        chrome_options.add_argument("--disable-extensions")
-        chrome_options.add_argument("--dns-prefetch-disable")
-        chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
-        
+        # Initialize the driver
         driver = webdriver.Chrome(options=chrome_options)
-        driver.set_page_load_timeout(180)
+        driver.set_page_load_timeout(180)  # 3 minutes timeout
         
         try:
-            # Construct the URL properly without special characters
-            url = self.base_url
-            print(f"Attempting to load base URL: {url}")
+            # Navigate to the URL
+            print(f"Loading URL: {self.base_url}")
+            driver.get(self.base_url)
             
-            max_retries = 5
-            retry_delay = 30
+            # Wait for the page to load
+            WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
             
-            for retry in range(max_retries):
-                try:
-                    print(f"\nAttempt {retry + 1}/{max_retries} to load the page...")
-                    driver.get(url)
-                    
-                    # Wait for the page to load
-                    WebDriverWait(driver, 30).until(
-                        EC.presence_of_element_located((By.TAG_NAME, "body"))
-                    )
-                    
-                    # After page loads, we can apply filters if needed
-                    try:
-                        # Wait for the search interface to be ready
-                        WebDriverWait(driver, 10).until(
-                            EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
-                        )
-                        print("Page loaded successfully with job listings!")
-                        break
-                    except Exception as e:
-                        print(f"Warning: Could not verify job listings: {e}")
-                        # Continue anyway as the page might still be usable
-                        break
-                    
-                except Exception as e:
-                    print(f"Attempt {retry + 1} failed: {str(e)}")
-                    if retry < max_retries - 1:
-                        print(f"Waiting {retry_delay} seconds before next attempt...")
-                        time.sleep(retry_delay)
-                        driver.delete_all_cookies()
-                    else:
-                        print("All attempts to load the page failed.")
-                        return []
+            # After page loads, we can apply filters if needed
+            try:
+                # Wait for the search interface to be ready
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
+                )
+                print("Page loaded successfully with job listings!")
+            except Exception as e:
+                print(f"Warning: Could not verify job listings: {e}")
+                # Continue anyway as the page might still be usable
             
             # Get the total number of jobs - with additional error handling
             try:
