@@ -1,10 +1,11 @@
 import os
 from datetime import datetime
 import time
-from scraper import main as scraper_main
+from scraper import main as scraper_main, ESSJobScraper
 from analyze_jobs import main as analyze_main
 from upload_to_supabase import upload_to_supabase
 import json
+import sys
 
 def cleanup_files(today: str, num_batches: int):
     """Delete all temporary files."""
@@ -25,56 +26,41 @@ def cleanup_files(today: str, num_batches: int):
             print(f"Error deleting {file}: {e}")
 
 def main():
-    today = datetime.now().strftime('%Y%m%d')
-    analyzed_file = f"jobs_analyzed_{today}.json"
-    
     try:
-        # Step 1: Run the scraper (now returns number of batches created)
-        print("\n=== Starting scraper ===")
-        num_batches = scraper_main()
-        if num_batches == 0:
-            print("No job batches were created. Exiting.")
-            return 0
-        print("Scraping completed successfully")
+        print("=== Starting scraper ===")
+        scraper = ESSJobScraper()
         
-        # Step 2: Run the analyzer (processes all batches)
-        print("\n=== Starting analysis ===")
-        api_key = os.getenv('GEMINI_API_KEY')
-        if not api_key:
-            raise Exception("GEMINI_API_KEY environment variable not set")
+        # Use Selenium to get ALL detailed job data (no limit)
+        print("\nStarting job scraping with no limit (scraping all available jobs)")
+        detailed_job_data = scraper.scrape_jobs_with_selenium(limit=None)
         
-        analyze_main()  # This will handle batch processing internally
-        
-        if not os.path.exists(analyzed_file):
-            raise Exception(f"Analysis failed to create {analyzed_file}")
+        if detailed_job_data and len(detailed_job_data) > 0:
+            # Save to JSON file
+            today = datetime.now().strftime('%Y%m%d')
+            batch_file = f"detailed_jobs_{today}.json"
+            with open(batch_file, 'w', encoding='utf-8') as f:
+                json.dump(detailed_job_data, f, ensure_ascii=False, indent=2)
+            print(f"Saved {len(detailed_job_data)} detailed job listings to {batch_file}")
             
-        # Verify that the analyzed file contains valid JSON
-        try:
-            with open(analyzed_file, 'r', encoding='utf-8') as f:
-                analyzed_jobs = json.load(f)
-            if not analyzed_jobs or not isinstance(analyzed_jobs, list):
-                raise Exception("Analyzed jobs file contains invalid or empty data")
-            print(f"Analysis completed successfully with {len(analyzed_jobs)} jobs")
-        except json.JSONDecodeError:
-            raise Exception("Analyzed jobs file contains invalid JSON")
-        
-        # Step 3: Upload to Supabase
-        print("\n=== Starting Supabase upload ===")
-        upload_to_supabase(analyzed_file)
-        print("Upload completed successfully")
-        
-        # Step 4: Cleanup all files
-        print("\n=== Cleaning up files ===")
-        cleanup_files(today, num_batches)
-        print("Cleanup completed")
-        
-        print("\n=== All tasks completed successfully ===")
-        
+            # Run the analyzer
+            print("\n=== Starting analysis ===")
+            analyze_main()
+            
+            # Upload to Supabase
+            print("\n=== Starting Supabase upload ===")
+            upload_to_supabase(f"jobs_analyzed_{today}.json")
+            print("Upload completed successfully")
+            
+            return 0
+        else:
+            print("No job data found.")
+            return 1
+            
     except Exception as e:
-        print(f"\nError in workflow: {e}")
+        print(f"Error in main function: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
-    
-    return 0
 
 if __name__ == "__main__":
-    exit(main()) 
+    sys.exit(main()) 

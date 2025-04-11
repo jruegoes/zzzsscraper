@@ -16,14 +16,8 @@ import selenium
 
 class ESSJobScraper:
     def __init__(self):
-        # Remove the fragment identifier (#) and encode the parameters properly
-        self.base_url = "https://www.ess.gov.si/iskalci-zaposlitve/iskanje-zaposlitve/iskanje-dela"
-        self.search_params = {
-            'drzava': 'SI',
-            'datObj': 'TODAY',
-            'iskalniTekst': '',
-            'iskalnaLokacija': ''
-        }
+        # Use the complete URL with search parameters
+        self.base_url = "https://www.ess.gov.si/iskalci-zaposlitve/iskanje-zaposlitve/iskanje-dela/#/?drzava=SI&datObj=TODAY&iskalniTekst=&iskalnaLokacija="
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
@@ -129,7 +123,7 @@ class ESSJobScraper:
                 print(f"Total jobs available: {total_jobs}")
             except Exception as e:
                 print(f"Warning: Could not determine total jobs: {e}")
-                total_jobs = 100  # Default to a reasonable number
+                total_jobs = 1000  # Increased default value
                 print(f"Using default value of {total_jobs} jobs")
             
             # Adjust max jobs to scrape based on limit
