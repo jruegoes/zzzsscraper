@@ -91,40 +91,26 @@ class ESSJobScraper:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         
+        # Initialize the driver
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.set_page_load_timeout(300)  # 5 minutes timeout
+        
         try:
-            # Initialize the driver with ChromeDriverManager
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            driver.set_page_load_timeout(300)  # 5 minutes timeout
-            
             # Navigate to the URL
             print(f"Loading URL: {self.base_url}")
             driver.get(self.base_url)
             
             # Wait for job listings to load
-            try:
-                WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
-                )
-            except Exception as e:
-                print(f"Initial page load failed, retrying... Error: {e}")
-                # Try refreshing the page
-                driver.refresh()
-                WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
-                )
+            WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
+            )
             
             # Get total jobs count
-            try:
-                total_jobs_element = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, ".card-header-title.number-text strong"))
-                )
-                total_jobs = int(total_jobs_element.text.strip())
-                print(f"Total jobs available: {total_jobs}")
-            except Exception as e:
-                print(f"Could not get total jobs count: {e}")
-                driver.quit()
-                return []
+            total_jobs_element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".card-header-title.number-text strong"))
+            )
+            total_jobs = int(total_jobs_element.text.strip())
+            print(f"Total jobs available: {total_jobs}")
             
             # Adjust max jobs to scrape based on limit
             max_jobs_to_scrape = total_jobs if limit is None else min(limit, total_jobs)
