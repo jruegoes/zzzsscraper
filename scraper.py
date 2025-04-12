@@ -13,6 +13,8 @@ from selenium.webdriver.support import expected_conditions as EC
 import re
 import sys
 import selenium
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 class ESSJobScraper:
     def __init__(self):
@@ -89,42 +91,40 @@ class ESSJobScraper:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         
-        # Initialize the driver
-        driver = webdriver.Chrome(options=chrome_options)
-        driver.set_page_load_timeout(180)  # 3 minutes timeout
-        
         try:
+            # Initialize the driver with ChromeDriverManager
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            driver.set_page_load_timeout(300)  # 5 minutes timeout
+            
             # Navigate to the URL
             print(f"Loading URL: {self.base_url}")
             driver.get(self.base_url)
             
-            # Wait for the page to load
-            WebDriverWait(driver, 30).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            
-            # After page loads, we can apply filters if needed
+            # Wait for job listings to load
             try:
-                # Wait for the search interface to be ready
-                WebDriverWait(driver, 10).until(
+                WebDriverWait(driver, 30).until(
                     EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
                 )
-                print("Page loaded successfully with job listings!")
             except Exception as e:
-                print(f"Warning: Could not verify job listings: {e}")
-                # Continue anyway as the page might still be usable
+                print(f"Initial page load failed, retrying... Error: {e}")
+                # Try refreshing the page
+                driver.refresh()
+                WebDriverWait(driver, 30).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
+                )
             
-            # Get the total number of jobs - with additional error handling
+            # Get total jobs count
             try:
-                total_jobs_element = WebDriverWait(driver, 30).until(
+                total_jobs_element = WebDriverWait(driver, 10).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, ".card-header-title.number-text strong"))
                 )
                 total_jobs = int(total_jobs_element.text.strip())
                 print(f"Total jobs available: {total_jobs}")
             except Exception as e:
-                print(f"Warning: Could not determine total jobs: {e}")
-                total_jobs = 1000  # Increased default value
-                print(f"Using default value of {total_jobs} jobs")
+                print(f"Could not get total jobs count: {e}")
+                driver.quit()
+                return []
             
             # Adjust max jobs to scrape based on limit
             max_jobs_to_scrape = total_jobs if limit is None else min(limit, total_jobs)
