@@ -19,7 +19,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 class ESSJobScraper:
     def __init__(self):
         # Use the complete URL with search parameters
-        self.base_url = "https://www.ess.gov.si/iskalci-zaposlitve/iskanje-zaposlitve/iskanje-dela/#/?drzava=SI&datObj=TODAY&iskalniTekst=&iskalnaLokacija="
+        self.base_url = "https://www.ess.gov.si/iskalci-zaposlitve/iskanje-zaposlitve/iskanje-dela/#/?iskalniTekst=&iskalnaLokacija=&drzava=SI,&datObj=3DAYSAGO"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
@@ -82,37 +82,56 @@ class ESSJobScraper:
 
     def scrape_jobs_with_selenium(self, limit=None):
         """
-        Use Selenium to scrape jobs from the ESS website.
-        If limit is None, all available jobs will be scraped.
+        Use Selenium to scrape jobs from the ESS website with improved error handling.
         """
-        # Basic Chrome options
+        # Enhanced Chrome options for better stability
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-infobars")
+        chrome_options.add_argument("--disable-browser-side-navigation")
+        chrome_options.page_load_strategy = 'eager'  # Don't wait for all resources
+        
+        # Initialize the driver with longer timeouts
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.set_page_load_timeout(180)  # 3 minutes
+        driver.set_script_timeout(180)
         
         try:
-            # Initialize the driver with ChromeDriverManager
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            driver.set_page_load_timeout(300)  # 5 minutes timeout
-            
-            # Navigate to the URL
-            print(f"Loading URL: {self.base_url}")
-            driver.get(self.base_url)
-            
-            # Wait for job listings to load
-            try:
-                WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
-                )
-            except Exception as e:
-                print(f"Initial page load failed, retrying... Error: {e}")
-                # Try refreshing the page
-                driver.refresh()
-                WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "list-group-item"))
-                )
+            # Navigate to the URL with retry
+            max_load_retries = 3
+            for load_attempt in range(max_load_retries):
+                try:
+                    print(f"Loading URL (attempt {load_attempt + 1}/{max_load_retries}): {self.base_url}")
+                    driver.get(self.base_url)
+                    
+                    # Wait for either job listings OR the page to load completely
+                    WebDriverWait(driver, 60).until(
+                        EC.presence_of_element_located((By.TAG_NAME, "body"))
+                    )
+                    time.sleep(3)  # Give JS time to execute
+                    
+                    # Check if page loaded successfully
+                    if len(driver.find_elements(By.CSS_SELECTOR, ".list-group-item")) > 0:
+                        print("Page loaded successfully with job listings")
+                        break
+                    else:
+                        print("No job listings found, might retry...")
+                        if load_attempt < max_load_retries - 1:
+                            time.sleep(10)
+                            driver.refresh()
+                except Exception as e:
+                    print(f"Page load attempt {load_attempt + 1} failed: {e}")
+                    if load_attempt < max_load_retries - 1:
+                        time.sleep(10)
+                        continue
+                    else:
+                        print("All page load attempts failed")
+                        return []
             
             # Get total jobs count
             try:
@@ -121,6 +140,12 @@ class ESSJobScraper:
                 )
                 total_jobs = int(total_jobs_element.text.strip())
                 print(f"Total jobs available: {total_jobs}")
+                
+                # Exit early if no jobs are available
+                if total_jobs == 0:
+                    print("No jobs available today. Exiting scraper.")
+                    return []
+                
             except Exception as e:
                 print(f"Could not get total jobs count: {e}")
                 driver.quit()
@@ -515,48 +540,24 @@ class ESSJobScraper:
 
 def main():
     try:
-        print("=== Starting scraper with improved error handling ===")
-        print("Python version:", sys.version)
-        print("Selenium version:", selenium.__version__)
-        
-        # Check internet connectivity first
-        try:
-            requests.get("https://www.google.com", timeout=5)
-            print("Internet connection test: SUCCESS")
-        except Exception as e:
-            print(f"Internet connection test: FAILED - {str(e)}")
-        
+        print("=== Starting scraper ===")
         scraper = ESSJobScraper()
         
         # Use Selenium to get ALL detailed job data (no limit)
         print("\nStarting job scraping with no limit (scraping all available jobs)")
+        detailed_job_data = scraper.scrape_jobs_with_selenium(limit=None)
         
-        # Add retry mechanism for the entire scraping process
-        max_retries = 3
-        for retry in range(max_retries):
-            try:
-                detailed_job_data = scraper.scrape_jobs_with_selenium(limit=None)
-                
-                if detailed_job_data and len(detailed_job_data) > 0:
-                    today = datetime.now().strftime('%Y%m%d')
-                    batch_file = f"detailed_jobs_{today}.json"
-                    with open(batch_file, 'w', encoding='utf-8') as f:
-                        json.dump(detailed_job_data, f, ensure_ascii=False, indent=2)
-                    print(f"Saved {len(detailed_job_data)} detailed job listings to {batch_file}")
-                    break
-                else:
-                    print(f"No job data returned from attempt {retry+1}/{max_retries}")
-                    if retry < max_retries - 1:
-                        print("Waiting 60 seconds before next attempt...")
-                        time.sleep(60)
-            except Exception as e:
-                print(f"Error during scraping attempt {retry+1}/{max_retries}: {e}")
-                if retry < max_retries - 1:
-                    print("Waiting 60 seconds before next attempt...")
-                    time.sleep(60)
-        else:
-            print("All retry attempts failed. No job data could be collected.")
-            return 1
+        # Check if we got any jobs
+        if not detailed_job_data:
+            print("No jobs available to process. Exiting.")
+            return 0  # Exit with success code since this is an expected condition
+            
+        # Only proceed with file saving if we have jobs
+        today = datetime.now().strftime('%Y%m%d')
+        batch_file = f"detailed_jobs_{today}.json"
+        with open(batch_file, 'w', encoding='utf-8') as f:
+            json.dump(detailed_job_data, f, ensure_ascii=False, indent=2)
+        print(f"Saved {len(detailed_job_data)} detailed job listings to {batch_file}")
         
         return 0
         
