@@ -19,7 +19,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 class ESSJobScraper:
     def __init__(self):
         # Use the complete URL with search parameters
-        self.base_url = "https://www.ess.gov.si/iskalci-zaposlitve/iskanje-zaposlitve/iskanje-dela/#/?iskalniTekst=&iskalnaLokacija=&drzava=SI,&datObj=3DAYSAGO"
+        self.base_url = "https://www.ess.gov.si/iskalci-zaposlitve/iskanje-zaposlitve/iskanje-dela/#/?iskalniTekst=&iskalnaLokacija=&drzava=SI,&datObj=TODAY"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
