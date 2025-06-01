@@ -4,6 +4,9 @@ import os
 from supabase import create_client
 from typing import Dict, Any
 import random
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def upload_to_supabase(analyzed_file: str) -> None:
     """Upload analyzed jobs to Supabase table."""

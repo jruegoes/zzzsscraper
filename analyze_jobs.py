@@ -2,6 +2,8 @@ import json
 import google.generativeai as genai
 from datetime import datetime
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 def analyze_with_gemini(batch_file: str, api_key: str) -> list:
     """Analyze a batch of job postings using Gemini API."""
